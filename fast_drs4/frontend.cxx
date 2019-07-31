@@ -1,47 +1,33 @@
-//********************************************************************
-//
-//  Name:         feDRS4.cc
-//  Created by:   Kolby Kiesling
-//
-//  Contents:     readout of DRS4 Eval. Board
-//
-//  $Id: $
-//
-//********************************************************************
+/********************************************************************\
+
+  Name:         feDRS4.cc
+  Created by:   Kolby Kiesling
+
+  Contents:     Experiment specific readout code (user part) of
+                DRS4 oscilloscope.
+
+\********************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 #include "DRS.h"
-#include <cstdio>
+DRS *drs; // initialize DRS object for later use, cannot call after calling MIDAS...
+DRSBoard *board;
+int i_start=0, i_end=0;
 
-  /* Forward Declaration of DRS Types */
-int i_start=0, i_end; // Initialization process to find N-number of DRS boards...
-DRS *drs;
-DRSBoard *board; 
-
-//drs = new DRS();
-for(int i=i_start; i<drs->GetNumberOfBoards(); i++){
-  i_end=i; // find number of boards connected
-}
 
 
 #include "midas.h"
+#include "experim.h"
 #include "mfe.h"
-#include <math.h>
 
+/*-- Globals -------------------------------------------------------*/
 
-//#ifdef __cplusplus
-//extern "C" {
-//#endif
-//#ifdef __cplusplus
-//}
-//#endif
-
-
-//-- Globals ---------------------------------------------------------
-//#ifdef __cplusplus
-//extern "C" {
-//#endif
-
-const char *frontend_name = "feDRS4";  // client name visible to other MIDAS clients
-const char *frontend_file_name = __FILE__;     // This frontend's source file name.  Do not change it.
+/* The frontend name (client name) as seen by other MIDAS clients   */
+const char *frontend_name = "feDRS4";
+/* The frontend file name, don't change it */
+const char *frontend_file_name = __FILE__;
 
 /* frontend_loop is called periodically if this variable is TRUE    */
 BOOL frontend_call_loop = FALSE;
@@ -58,6 +44,19 @@ INT max_event_size_frag = 5 * 1024 * 1024;
 /* buffer size to hold events */
 INT event_buffer_size = 100 * 10000;
 
+/*
+ Forward Declaration of DRS Types 
+int i_start=0, i_end; // Initialization process to find N-number of DRS boards...
+DRS *drs;
+DRSBoard *board; 
+
+drs = new DRS();
+for(int i=i_start; i<drs->GetNumberOfBoards(); i++){
+  i_end=i; // find number of boards connected
+}
+*/
+
+
 
 /*-- Function declarations -----------------------------------------*/
 
@@ -67,7 +66,7 @@ INT begin_of_run(INT run_number, char *error);
 INT end_of_run(INT run_number, char *error);
 INT pause_run(INT run_number, char *error);
 INT resume_run(INT run_number, char *error);
-INT frontend_loop(void);
+INT frontend_loop();
 
 INT read_trigger_event(char *pevent, INT off);
 INT read_periodic_event(char *pevent, INT off);
@@ -75,11 +74,7 @@ INT read_periodic_event(char *pevent, INT off);
 INT poll_event(INT source, INT count, BOOL test);
 INT interrupt_configure(INT cmd, INT source, POINTER_T adr);
 
-
-
-//-- Equipment list --------------------------------------------------
-
-// device driver list
+/*-- Equipment list ------------------------------------------------*/
 
 EQUIPMENT equipment[] = {
 
@@ -120,7 +115,6 @@ EQUIPMENT equipment[] = {
    {""}
 };
 
-
 /********************************************************************\
               Callback routines for system transitions
 
@@ -151,30 +145,60 @@ EQUIPMENT equipment[] = {
 INT frontend_init()
 {
    /* put any hardware initialization here */
+   /* Forward Declaration of DRS Types    */
+
+   drs = new DRS();
+   for (int i=i_start; i<drs->GetNumberOfBoards(); i++){
+     i_end=i+1; // find number of boards connected
+   }
+ 
    int nBoards;
    for (int i=i_start; i<i_end; i++) {
      board=drs->GetBoard(i); // fetch the board index
-     printf("Found DRS4 Evaluation board, serial #%d, firmware revision %d\n",
-	    board->GetBoardSerialNumber(), board->GetFirmwareVersion());
+     printf("Found DRS%d board %2d on USB, serial #%04d, firmware revision %5d\n", 
+         board->GetDRSType(), i, board->GetBoardSerialNumber(), board->GetFirmwareVersion());
+     board->SetLED(0); // turn LED off...
   }
   
   nBoards=drs->GetNumberOfBoards();
+  printf("Boards found\t%d\n\n", nBoards);
   if (nBoards==0) {
     printf("No DRS4 evaluation board found\n");
-    return -1;
+    return FE_ERR_HW;
   }
-  
-
+  if (i_end) {} // compiling warnings
    /* print message and return FE_ERR_HW if frontend should not be started */
-
-   return SUCCESS;
+  for (int i=0; i<i_end; i++) {
+    board=drs->GetBoard(i); // fetch the board
+    printf("--------------------\nInitializing DRS%d board %2d on USB, serial #%04d, firmware revision %5d\n--------------------\n", 
+         board->GetDRSType(), i, board->GetBoardSerialNumber(), board->GetFirmwareVersion());
+    // TODO: use DRS ONE as the master unit and all other DRS units will be slaves
+    board->Init(); // initialize the board for daq
+    board->SetFrequency(5, true); // set sampling frequency
+    board->SetTranspMode(1);
+    board->SetInputRange(0); // -0.5V to 0.5V
+    board->EnableTcal(1); // enable internal clock
+    if (board->GetBoardType() >= 8) {
+      board->EnableTrigger(1, 0); // enable hardware trigger
+      board->SetTriggerSource(1<<0); // set channel zero as source (CH1)
+    }
+    else if (board->GetBoardType() == 7) {
+      board->EnableTrigger(0, 1); // lemo off, analog on
+      board->SetTriggerSource(1<<0);
+    }
+    board->SetTriggerLevel(0.025); // 0.025V?
+    board->SetTriggerPolarity(true); // negative pulses?
+    set
+  }
+  return SUCCESS;
 }
 
 /*-- Frontend Exit -------------------------------------------------*/
 
 INT frontend_exit()
 {
-   return SUCCESS;
+  printf("Exiting DAQ\n");
+  return SUCCESS;
 }
 
 /*-- Begin of Run --------------------------------------------------*/
@@ -317,8 +341,3 @@ INT read_periodic_event(char *pevent, INT off)
 
    return bk_size(pevent);
 }
-
-//--------------------------------------------------------------------
-//#ifdef __cplusplus
-//}
-//#endif
