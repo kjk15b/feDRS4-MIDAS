@@ -214,7 +214,7 @@ INT frontend_init()
 
 INT frontend_exit()
 {
-  printf("Exiting DAQ\n");
+  printf("Exiting DAQ\n"); // TODO: Commit a stable exit routine to close DRS4 properly
   return SUCCESS;
 }
 
@@ -222,30 +222,46 @@ INT frontend_exit()
 
 INT begin_of_run(INT run_number, char *error)
 {
-   /* put here clear scalers etc. */
-
-   return SUCCESS;
+  /* put here clear scalers etc. */
+  for (int i=0; i<i_end; i++) {
+    board=drs->GetBoard(i);
+    board->StartDomino(); // Start Domino waveforms on DRS 
+    board->SetLED(0); // Show we are about to begin acquisition
+  } 
+  return SUCCESS;
 }
 
 /*-- End of Run ----------------------------------------------------*/
 
 INT end_of_run(INT run_number, char *error)
 {
-   return SUCCESS;
+  for (int i=0; i<i_end; i++) {
+    board=drs->GetBoard(i);
+    board->SetLED(1); // Show we ended acquisition
+  }
+  return SUCCESS;
 }
 
 /*-- Pause Run -----------------------------------------------------*/
 
 INT pause_run(INT run_number, char *error)
 {
-   return SUCCESS;
+  for (int i=0; i<i_end; i++) {
+    board=drs->GetBoard(i);
+    board->SetLED(1); // Show we paused acquisition
+  }
+  return SUCCESS;
 }
 
 /*-- Resuem Run ----------------------------------------------------*/
 
 INT resume_run(INT run_number, char *error)
 {
-   return SUCCESS;
+  for (int i=0; i<i_end; i++) {
+    board=drs->GetBoard(i);
+    board->SetLED(0); // Show we resumed acquisition
+  }
+  return SUCCESS;
 }
 
 /*-- Frontend Loop -------------------------------------------------*/
@@ -279,9 +295,14 @@ INT poll_event(INT source, INT count, BOOL test)
       /* poll hardware and set flag to TRUE if new event is available */
       flag = TRUE;
 
-      if (flag)
-         if (!test)
-            return TRUE;
+      if (flag) {
+         //if (!test)
+	for (int i=0; i<i_end; i++) {
+	  board=drs->GetBoard(i);
+	  if (board->IsEventAvailable() < 0)
+	    return TRUE; // maybe have to be tweaked?
+	}
+      }
    }
 
    return 0;
@@ -292,7 +313,7 @@ INT poll_event(INT source, INT count, BOOL test)
 INT interrupt_configure(INT cmd, INT source, POINTER_T adr)
 {
    switch (cmd) {
-   case CMD_INTERRUPT_ENABLE:
+   case CMD_INTERRUPT_ENABLE: // will roll without these for right now
       break;
    case CMD_INTERRUPT_DISABLE:
       break;
