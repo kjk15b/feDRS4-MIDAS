@@ -194,18 +194,18 @@ INT frontend_init()
       board->SetIndividualTriggerLevel(3, 0.4);
       board->SetTriggerSource(15); // set total coincidence between all channels
     }
-    else { // set slave units for external triggers?
-      if (board->GetBoardType() >= 8) {
-	board->EnableTrigger(1, 0);           // enable hardware trigger
-	board->SetTriggerSource(1<<4);        // set external trigger as source
-      } 
-      else {                          // Evaluation Board V3
-	board->EnableTrigger(1, 0);           // lemo on, analog trigger off
-      }
-    }
+    else if (i==1) {
+      board->SetIndividualTriggerLevel(0, 0.1); // individual thresholds on DRS 2
+      board->SetIndividualTriggerLevel(1, 0.2);
+      board->SetIndividualTriggerLevel(2, 0.3);
+      board->SetIndividualTriggerLevel(3, 0.4);
+      board->SetTriggerSource(15);
+    } // set slave units for external triggers?
+
     board->SetTriggerLevel(0.025); // 0.025V?
     board->SetTriggerPolarity(true); // negative pulses?
     board->SetTriggerDelayNs(0); // no delays on triggers...
+    board->SetLED(1); // show ready for acquisition
   }
   return SUCCESS;
 }
